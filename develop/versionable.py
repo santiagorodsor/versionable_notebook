@@ -1,10 +1,10 @@
 import types
-import os
-import sys
+import os,sys,re
 
 VERSIONABLE_CLASS_PREFIX = "Backend"
 VERSIONABLE_FILE_PREFIX = "backend"
-VERSIONABLE_FOLDER = "."
+VERSIONABLE_FILE_SEPARATOR = "_"
+VERSIONABLE_FOLDER = ""
 VERSIONABLE_AUTOGEN_CONTENT = """import versionable
 
 class {}(versionable.Versionable):
@@ -18,14 +18,14 @@ class {}(versionable.Versionable):
 
 class Versionable(object):
     """
-        Interface that enable load diferent versions at request
+        Object that wraps dynamic implementations loading and versioning
     """
     
     def __init__(self,version):
         name = str(self.__class__.__name__)
         name = name.split(".")[0].split("/")[-1]
         if version is None:
-            version=self.__last_flagged_version(name)
+            version=self.__greatest_version(name)
         else:
             version = str(version)
         implementation = self.__load(name,version)
@@ -37,40 +37,37 @@ class Versionable(object):
 
     def __load(self,name,version):
         if name in version:
+            #TO catch any version string diferent than "name_versionnumber"
             to_import = version.split(".")[0]
         else:
-            to_import = name + "_v_"+str(version)
+            to_import = name + VERSIONABLE_FILE_SEPARATOR +str(version)
             
         print("Loading : " + name + " version "+ str(version))
         try:
-            self.__refresh(to_import) 
+            if to_import in list(sys.modules):
+                sys.modules.pop(to_import)
+                print("Refreshed: "+ str(to_import))
             return __import__(to_import)
         except Exception as inst:
             print(inst)
         
-        #import to_import as imported
-        #return imported
-#        raise NotImplementedError("Class %s doesn't implement load()" % (self.__class__.__name__))
         
-    def __last_flagged_version(self,name):
-        version_files = [file_ for file_ in os.listdir(".") if name in file_ and file_.endswith(".py")]
-        versions = {v.split(".")[0].split("_")[-1]:v for v in version_files}
-        print(versions)
-        last_flag = "last"
-        last_version = last_flag if last_flag in versions.keys() else max(versions.keys())
-        print(last_version)
-        return versions[last_version]
-    
-    def __refresh(self,lib):
-        if lib in list(sys.modules):
-            something = sys.modules.pop(lib)
-            print("Refreshed: "+ str(lib))
+    def __greatest_version(self,name):
+        """
+        Takes greater version formated
+        """
+        reg = re.compile(".*?(\d+)\.py$")
+        version_files = [file_ for file_ in os.listdir(".") if reg.search(file_)]
+        versions = {reg.match(v).group(1):v for v in version_files}
+        last_version = max(versions.keys())
+        print("Greatest version file: {}".format(versions[last_version]))
+        return versions[last_version]        
 
 def buildup(name,version):
-    versionable_class = VERSIONABLE_CLASS_PREFIX+"_"+name
-    versionable_file = versionable_class+"_"+version+".py"
+    versionable_class = VERSIONABLE_CLASS_PREFIX+VERSIONABLE_FILE_SEPARATOR+name
+    versionable_file = versionable_class+VERSIONABLE_FILE_SEPARATOR+version+".py"
     
-    versionable_base_file = VERSIONABLE_FILE_PREFIX+"_"+name+".py"
+    versionable_base_file = VERSIONABLE_FILE_PREFIX+VERSIONABLE_FILE_SEPARATOR+name+".py"
 
     #create base file
     if not os.path.exists(versionable_base_file):
